@@ -30,7 +30,18 @@ Notes:
 
 - The server name (`image-gen`) must come before the `-e` flags. A name placed directly after an `-e` pair is parsed as another env assignment.
 - Omit the `-e` line for any provider you do not use.
+- Adjust the `dist/index.js` path if this repo lives somewhere else on your machine.
 - Start a NEW Claude Code session to pick up the server, then verify with `claude mcp list`.
+
+## Use it from Claude Code
+
+Once registered, just ask in any project:
+
+- "Generate a 16:9 blog cover about SMS gateways and save it to assets/blog/sms-gateway-cover.png"
+- "Take public/logo.png and give it a transparent background" (transparency needs `provider: openai`)
+- "Create 3 variations of a flat paper airplane icon, square, into design/drafts/"
+
+Claude calls `generate_image` or `edit_image` with an absolute `output_path` inside your project, the file lands on disk, and Claude can Read the saved path to look at the result and iterate. If a call fails, ask Claude to run `list_capabilities` to see what is configured.
 
 ### Project scope (.mcp.json)
 
