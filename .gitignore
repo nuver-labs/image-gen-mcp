@@ -1,0 +1,5 @@
+node_modules/
+dist/
+smoke-output/
+.env
+.DS_Store

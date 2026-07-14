@@ -1,0 +1,28 @@
+{
+  "name": "image-gen-mcp",
+  "version": "0.1.0",
+  "description": "Stdio MCP server that generates and edits images with Gemini and OpenAI",
+  "type": "module",
+  "private": true,
+  "bin": { "image-gen-mcp": "dist/index.js" },
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=22" },
+  "packageManager": "pnpm@9.14.2",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "start": "node dist/index.js",
+    "smoke": "pnpm build && node dist/smoke.js",
+    "inspect": "pnpm build && npx @modelcontextprotocol/inspector@0.22.0 --cli node dist/index.js --method tools/list"
+  },
+  "dependencies": {
+    "@google/genai": "^2.11.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "openai": "^6.46.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^7.0.2"
+  }
+}
