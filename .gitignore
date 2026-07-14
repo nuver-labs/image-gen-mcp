@@ -3,3 +3,6 @@ dist/
 smoke-output/
 .env
 .DS_Store
+.omc/
+.claude/
+.cursor/

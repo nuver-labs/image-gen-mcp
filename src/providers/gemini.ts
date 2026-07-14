@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import type { GenerateContentResponseUsageMetadata } from '@google/genai';
 import type { Config } from '../config.js';
 import type {
   EditArgs,
@@ -6,6 +7,7 @@ import type {
   GeneratedImage,
   ImageProvider,
   ProviderResult,
+  TokenUsage,
 } from './types.js';
 import { ProviderError } from './types.js';
 
@@ -61,7 +63,11 @@ export class GeminiProvider implements ImageProvider {
   private async callOnce(
     contents: GeminiContents,
     args: GenerateArgs,
-  ): Promise<{ images: GeneratedImage[]; texts: string[] }> {
+  ): Promise<{
+    images: GeneratedImage[];
+    texts: string[];
+    usage?: GenerateContentResponseUsageMetadata | undefined;
+  }> {
     const ai = this.getClient();
     const res = await withRetry(() =>
       ai.models.generateContent({
@@ -96,7 +102,7 @@ export class GeminiProvider implements ImageProvider {
         'refused',
       );
     }
-    return { images, texts };
+    return { images, texts, usage: res.usageMetadata };
   }
 
   async generate(args: GenerateArgs): Promise<ProviderResult> {
@@ -130,10 +136,12 @@ export class GeminiProvider implements ImageProvider {
   private async loop(contents: GeminiContents, args: GenerateArgs): Promise<ProviderResult> {
     const images: GeneratedImage[] = [];
     const texts: string[] = [];
+    const usages: Array<GenerateContentResponseUsageMetadata | undefined> = [];
     for (let i = 1; i <= args.n; i++) {
       const r = await this.callOnce(contents, args);
       images.push(...r.images);
       texts.push(...r.texts);
+      usages.push(r.usage);
       if (args.n > 1) args.onProgress?.(`image ${i} of ${args.n} done`);
     }
     const sizeDescription = `${args.aspectRatio ?? 'default aspect'}${
@@ -144,8 +152,39 @@ export class GeminiProvider implements ImageProvider {
       text: texts.join(' ').trim() || undefined,
       model: args.model,
       sizeDescription,
+      usage: accumulateUsage(usages),
     };
   }
+}
+
+// The n-loop makes one call per image, so token usage is summed across the calls.
+function accumulateUsage(
+  metas: Array<GenerateContentResponseUsageMetadata | undefined>,
+): TokenUsage | undefined {
+  const present = metas.filter((m): m is GenerateContentResponseUsageMetadata => Boolean(m));
+  if (present.length === 0) return undefined;
+  const sum = (pick: (m: GenerateContentResponseUsageMetadata) => number | undefined) => {
+    let total = 0;
+    let any = false;
+    for (const m of present) {
+      const v = pick(m);
+      if (typeof v === 'number') {
+        total += v;
+        any = true;
+      }
+    }
+    return any ? total : undefined;
+  };
+  const thoughtsTokens = sum((m) => m.thoughtsTokenCount);
+  return {
+    inputTokens: sum((m) => m.promptTokenCount),
+    outputTokens: sum((m) => m.candidatesTokenCount),
+    totalTokens: sum((m) => m.totalTokenCount),
+    details: {
+      calls: present.length,
+      ...(thoughtsTokens !== undefined && { thoughtsTokenCount: thoughtsTokens }),
+    },
+  };
 }
 
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {

@@ -43,6 +43,15 @@ export interface EditArgs extends GenerateArgs {
   inputFidelity?: InputFidelity | undefined;
 }
 
+/** Normalized token usage across providers; missing fields mean the provider did not report them. */
+export interface TokenUsage {
+  inputTokens?: number | undefined;
+  outputTokens?: number | undefined;
+  totalTokens?: number | undefined;
+  /** Provider-specific breakdown (token detail objects), logged verbatim. */
+  details?: Record<string, unknown> | undefined;
+}
+
 export interface ProviderResult {
   images: GeneratedImage[];
   /** revised_prompt (OpenAI) or text parts (Gemini), when present. */
@@ -50,6 +59,8 @@ export interface ProviderResult {
   model: string;
   /** Human-readable, e.g. "1536x1024" or "16:9 @ 1K". */
   sizeDescription: string;
+  /** Token usage reported by the provider, when available. */
+  usage?: TokenUsage | undefined;
 }
 
 export interface ImageProvider {

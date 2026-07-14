@@ -8,6 +8,7 @@ import type {
   GenerateArgs,
   ImageProvider,
   ProviderResult,
+  TokenUsage,
 } from './types.js';
 import { ProviderError } from './types.js';
 
@@ -111,8 +112,22 @@ export class OpenAIProvider implements ImageProvider {
       text: data[0]?.revised_prompt ?? undefined,
       model: args.model,
       sizeDescription,
+      usage: normalizeUsage(res.usage),
     };
   }
+}
+
+function normalizeUsage(usage: OpenAI.Images.ImagesResponse.Usage | undefined): TokenUsage | undefined {
+  if (!usage) return undefined;
+  return {
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    totalTokens: usage.total_tokens,
+    details: {
+      input_tokens_details: usage.input_tokens_details,
+      ...(usage.output_tokens_details && { output_tokens_details: usage.output_tokens_details }),
+    },
+  };
 }
 
 function mapError(err: unknown, model: string): ProviderError {

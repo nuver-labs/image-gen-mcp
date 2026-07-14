@@ -9,11 +9,14 @@ import {
   correctExtensionForMime,
   detectMime,
   formatBytes,
+  logImageEvent,
+  readImageSize,
   resolveOutputTargets,
   uniquePath,
 } from './files.js';
+import type { ImageLogEntry } from './files.js';
 import { buildProviders, resolveProvider } from './providers/index.js';
-import type { GeneratedImage, ProviderResult, SourceImage } from './providers/types.js';
+import type { GeneratedImage, ProviderResult, SourceImage, TokenUsage } from './providers/types.js';
 import { ProviderError } from './providers/types.js';
 
 const sharedInput = {
@@ -121,13 +124,21 @@ function startTicker(extra: ProgressExtra, initialMessage: string) {
   };
 }
 
+interface SavedImage {
+  path: string;
+  bytes: number;
+  mimeType: string;
+  width?: number | undefined;
+  height?: number | undefined;
+}
+
 function writeImages(
   images: GeneratedImage[],
   plannedPaths: string[],
   extraNotes: string[],
-): Array<{ path: string; bytes: number }> {
+): SavedImage[] {
   const taken = new Set(plannedPaths);
-  const saved: Array<{ path: string; bytes: number }> = [];
+  const saved: SavedImage[] = [];
   images.forEach((img, idx) => {
     let target = plannedPaths[idx];
     if (!target) {
@@ -140,16 +151,77 @@ function writeImages(
     if (corrected.note) extraNotes.push(corrected.note);
     fs.writeFileSync(corrected.path, img.data);
     taken.add(corrected.path);
-    saved.push({ path: corrected.path, bytes: img.data.length });
+    const dimensions = readImageSize(img.data);
+    saved.push({
+      path: corrected.path,
+      bytes: img.data.length,
+      mimeType: img.mimeType,
+      width: dimensions?.width,
+      height: dimensions?.height,
+    });
   });
   return saved;
+}
+
+const PROMPT_LOG_LIMIT = 500;
+
+function truncate(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
+// Emits one structured record (stderr always, JSONL ledger when configured) per successful call.
+function logImages(
+  event: ImageLogEntry['event'],
+  config: Config,
+  providerName: string,
+  result: ProviderResult,
+  saved: SavedImage[],
+  prompt: string,
+  requested: number,
+  elapsedSeconds: number,
+  sources?: number,
+): void {
+  const entry: ImageLogEntry = {
+    ts: new Date().toISOString(),
+    event,
+    provider: providerName,
+    model: result.model,
+    requestedSize: result.sizeDescription,
+    requested,
+    produced: saved.length,
+    elapsedSeconds,
+    promptChars: prompt.length,
+    prompt: truncate(prompt, PROMPT_LOG_LIMIT),
+    ...(sources !== undefined && { sources }),
+    ...(result.usage && { usage: result.usage }),
+    ...(result.text && { providerText: truncate(result.text, PROMPT_LOG_LIMIT) }),
+    images: saved.map((s) => ({
+      path: s.path,
+      bytes: s.bytes,
+      size: formatBytes(s.bytes),
+      mimeType: s.mimeType,
+      width: s.width,
+      height: s.height,
+    })),
+  };
+  logImageEvent(entry, config.logFile);
+}
+
+function tokenLines(usage: TokenUsage | undefined): string[] {
+  if (!usage) return [];
+  const parts = [
+    usage.inputTokens !== undefined ? `input ${usage.inputTokens}` : null,
+    usage.outputTokens !== undefined ? `output ${usage.outputTokens}` : null,
+    usage.totalTokens !== undefined ? `total ${usage.totalTokens}` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length > 0 ? [`Tokens: ${parts.join(', ')}.`] : [];
 }
 
 function successResult(
   action: 'Generated' | 'Edited',
   providerName: string,
   result: ProviderResult,
-  saved: Array<{ path: string; bytes: number }>,
+  saved: SavedImage[],
   notes: string[],
   elapsedSeconds: string,
   returnImage: boolean,
@@ -157,7 +229,11 @@ function successResult(
   const lines = [
     `${action} ${saved.length} image${saved.length === 1 ? '' : 's'} with ${providerName} (model ${result.model}, ${result.sizeDescription}) in ${elapsedSeconds}s.`,
     'Saved:',
-    ...saved.map((s) => `- ${s.path} (${formatBytes(s.bytes)})`),
+    ...saved.map((s) => {
+      const dim = s.width && s.height ? `${s.width}x${s.height}, ` : '';
+      return `- ${s.path} (${dim}${formatBytes(s.bytes)})`;
+    }),
+    ...tokenLines(result.usage),
     ...notes.map((n) => `Note: ${n}`),
     ...(result.text ? [`Provider note: ${result.text}`] : []),
   ];
@@ -216,6 +292,7 @@ export function createServer(config: Config): McpServer {
         const elapsed = ((Date.now() - started) / 1000).toFixed(1);
         const notes = [...targets.notes];
         const saved = writeImages(result.images, targets.paths, notes);
+        logImages('generate_image', config, provider.name, result, saved, input.prompt, n, Number(elapsed));
         return successResult(
           'Generated',
           provider.name,
@@ -302,6 +379,17 @@ export function createServer(config: Config): McpServer {
         const elapsed = ((Date.now() - started) / 1000).toFixed(1);
         const notes = [...targets.notes];
         const saved = writeImages(result.images, targets.paths, notes);
+        logImages(
+          'edit_image',
+          config,
+          provider.name,
+          result,
+          saved,
+          input.prompt,
+          n,
+          Number(elapsed),
+          sources.length,
+        );
         return successResult(
           'Edited',
           provider.name,

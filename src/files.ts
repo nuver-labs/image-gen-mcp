@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Config } from './config.js';
+import { log } from './config.js';
+import type { TokenUsage } from './providers/types.js';
 
 export type OutputFormat = 'png' | 'jpeg' | 'webp';
 
@@ -68,6 +70,81 @@ export function detectMime(buffer: Buffer, sourcePath: string): string {
   const byExt = FORMAT_BY_EXT[path.extname(sourcePath).toLowerCase()];
   if (byExt) return MIME_BY_FORMAT[byExt];
   throw new FileError(`Unsupported input image type for ${sourcePath}. Supported: png, jpeg, webp.`);
+}
+
+// Best-effort pixel dimensions parsed from the image header. Providers either omit dimensions
+// (Gemini) or only report one of a few preset sizes (OpenAI), so we read them from the bytes.
+// Returns undefined for anything unrecognized, truncated, or malformed.
+export function readImageSize(buffer: Buffer): { width: number; height: number } | undefined {
+  try {
+    // PNG: signature then IHDR width/height as big-endian uint32.
+    if (buffer.length >= 24 && buffer.readUInt32BE(0) === 0x89504e47) {
+      return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+    }
+
+    // JPEG: walk segment markers to the start-of-frame, which holds 16-bit height then width.
+    if (buffer.length >= 4 && buffer.readUInt16BE(0) === 0xffd8) {
+      let offset = 2;
+      while (offset + 4 <= buffer.length) {
+        if (buffer.readUInt8(offset) !== 0xff) {
+          offset += 1;
+          continue;
+        }
+        let marker = buffer.readUInt8(offset + 1);
+        while (marker === 0xff && offset + 2 < buffer.length) {
+          offset += 1;
+          marker = buffer.readUInt8(offset + 1);
+        }
+        // Standalone markers (SOI, EOI, RSTn, TEM) carry no length payload.
+        if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
+          offset += 2;
+          continue;
+        }
+        // SOF markers (0xC0-0xCF) hold the dimensions, except DHT/JPG/DAC (0xC4/0xC8/0xCC).
+        const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+        if (isSof) {
+          if (offset + 9 > buffer.length) break;
+          return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
+        }
+        offset += 2 + buffer.readUInt16BE(offset + 2);
+      }
+      return undefined;
+    }
+
+    // WebP: RIFF container with a WEBP fourCC, then one of three frame formats.
+    if (
+      buffer.length >= 16 &&
+      buffer.toString('ascii', 0, 4) === 'RIFF' &&
+      buffer.toString('ascii', 8, 12) === 'WEBP'
+    ) {
+      const format = buffer.toString('ascii', 12, 16);
+      if (format === 'VP8 ' && buffer.length >= 30) {
+        return {
+          width: buffer.readUInt16LE(26) & 0x3fff,
+          height: buffer.readUInt16LE(28) & 0x3fff,
+        };
+      }
+      if (format === 'VP8L' && buffer.length >= 25) {
+        const b1 = buffer.readUInt8(21);
+        const b2 = buffer.readUInt8(22);
+        const b3 = buffer.readUInt8(23);
+        const b4 = buffer.readUInt8(24);
+        return {
+          width: 1 + (((b2 & 0x3f) << 8) | b1),
+          height: 1 + (((b4 & 0x0f) << 10) | (b3 << 2) | ((b2 & 0xc0) >> 6)),
+        };
+      }
+      if (format === 'VP8X' && buffer.length >= 30) {
+        return {
+          width: 1 + buffer.readUIntLE(24, 3),
+          height: 1 + buffer.readUIntLE(27, 3),
+        };
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function expandHome(p: string): string {
@@ -178,4 +255,60 @@ export function correctExtensionForMime(
   const swapped = filePath.slice(0, filePath.length - currentExt.length) + EXT_BY_FORMAT[actual];
   const unique = uniquePath(swapped, taken);
   return { path: unique, note: `Provider returned ${mimeType}; saved as ${path.basename(unique)}` };
+}
+
+export interface LoggedImage {
+  path: string;
+  bytes: number;
+  /** Human-readable size, e.g. "120.6 KB". */
+  size: string;
+  mimeType: string;
+  width?: number | undefined;
+  height?: number | undefined;
+}
+
+/** One structured record per successful generate/edit call, emitted to stderr and the JSONL ledger. */
+export interface ImageLogEntry {
+  ts: string;
+  event: 'generate_image' | 'edit_image';
+  provider: string;
+  model: string;
+  /** Requested size description, e.g. "1536x1024" or "16:9 @ 1K". */
+  requestedSize: string;
+  /** Images requested (n). */
+  requested: number;
+  /** Images actually produced. */
+  produced: number;
+  elapsedSeconds: number;
+  promptChars: number;
+  /** Prompt, truncated for the log. */
+  prompt: string;
+  /** Source image count, edit_image only. */
+  sources?: number | undefined;
+  usage?: TokenUsage | undefined;
+  /** revised_prompt (OpenAI) or text parts (Gemini), truncated. */
+  providerText?: string | undefined;
+  images: LoggedImage[];
+}
+
+let ledgerWarned = false;
+
+// Always logs the record to stderr; also appends it to the JSONL ledger when a path is configured.
+// A ledger write failure never breaks the tool call: it warns once, then stays quiet.
+export function logImageEvent(entry: ImageLogEntry, logFile?: string): void {
+  const line = JSON.stringify(entry);
+  log('image', line);
+  if (!logFile) return;
+  try {
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    fs.appendFileSync(logFile, line + '\n');
+  } catch (err) {
+    if (!ledgerWarned) {
+      ledgerWarned = true;
+      log(
+        `warning: could not write image log to ${logFile}: ${err instanceof Error ? err.message : String(err)}.` +
+          ' Further ledger write errors will be suppressed.',
+      );
+    }
+  }
 }

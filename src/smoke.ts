@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadConfig } from './config.js';
-import { correctExtensionForMime, detectMime, formatBytes, resolveOutputTargets } from './files.js';
+import { correctExtensionForMime, detectMime, formatBytes, readImageSize, resolveOutputTargets } from './files.js';
 import { buildProviders, resolveProvider } from './providers/index.js';
 import type { ProviderResult } from './providers/types.js';
 
@@ -83,9 +83,12 @@ try {
     const corrected = correctExtensionForMime(planned, img.mimeType, taken);
     fs.writeFileSync(corrected.path, img.data);
     taken.add(corrected.path);
-    console.log(`Saved ${corrected.path} (${formatBytes(img.data.length)})`);
+    const dim = readImageSize(img.data);
+    const dimStr = dim ? `${dim.width}x${dim.height}, ` : '';
+    console.log(`Saved ${corrected.path} (${dimStr}${formatBytes(img.data.length)}, ${img.mimeType})`);
   });
   if (result.text) console.log(`Provider note: ${result.text}`);
+  if (result.usage) console.log(`Usage: ${JSON.stringify(result.usage)}`);
   console.log(`OK: ${result.images.length} image(s) with ${provider.name} (${result.model}) in ${elapsed}s`);
 } catch (err) {
   console.error('SMOKE FAILED:', err instanceof Error ? err.message : err);

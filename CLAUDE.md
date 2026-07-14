@@ -24,17 +24,22 @@ A standalone stdio MCP server that generates and edits images with Gemini and Op
 
 - `src/index.ts`: bootstrap (stdio transport, signal handling)
 - `src/server.ts`: McpServer plus the 3 tools (`generate_image`, `edit_image`, `list_capabilities`), progress ticker, error mapping
-- `src/config.ts`: env parsing (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `IMAGE_GEN_MCP_*` overrides), stderr `log()`
-- `src/files.ts`: output path resolution (explicit > `IMAGE_GEN_MCP_OUTPUT_DIR` > `CLAUDE_PROJECT_DIR` > cwd), slugified collision-safe names, mime sniffing, extension correction (Gemini returns JPEG by default)
-- `src/providers/`: `ImageProvider` interface; `openai.ts` (images.generate/edit, toFile multipart); `gemini.ts` (generateContent, inlineData parts, single-retry wrapper)
+- `src/config.ts`: env parsing (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `IMAGE_GEN_MCP_*` overrides including `IMAGE_GEN_MCP_LOG_FILE`), stderr `log()`
+- `src/files.ts`: output path resolution (explicit > `IMAGE_GEN_MCP_OUTPUT_DIR` > `CLAUDE_PROJECT_DIR` > cwd), slugified collision-safe names, mime sniffing, extension correction (Gemini returns JPEG by default), `readImageSize` (header parse for PNG/JPEG/WebP dimensions), `logImageEvent` (per-image record to stderr plus the JSONL ledger)
+- `src/providers/`: `ImageProvider` interface returning `ProviderResult` (now carries normalized `TokenUsage`); `openai.ts` (images.generate/edit, toFile multipart, maps `res.usage`); `gemini.ts` (generateContent, inlineData parts, single-retry wrapper, accumulates `res.usageMetadata` across the n-loop)
+
+## Image logging
+
+Every successful generate/edit logs one structured JSON record (provider, model, requested size, elapsed, truncated prompt + char count, token usage when reported, and a per-image list with path, bytes, human size, mime, actual pixel dimensions). It always goes to stderr via `log('image', ...)` and, unless disabled, is appended to the JSONL ledger at `IMAGE_GEN_MCP_LOG_FILE` (default `~/.image-gen-mcp/images.jsonl`; `none`/`off` disables the file). Ledger writes are guarded: a failure warns once and never breaks the tool call. Never add prompt or key material beyond the existing truncated prompt.
 
 ## Verification before claiming done
 
 1. `pnpm build` exits 0
 2. `pnpm inspect` shows exactly 3 tools
 3. Keyless `node dist/index.js` prints only the stderr ready line, nothing on stdout
-4. If provider behavior changed: one cheap live smoke per touched provider (`quality low` or the lite model) and Read the output image to confirm it is a real image
+4. If provider behavior changed: one cheap live smoke per touched provider (`quality low` or the lite model) and Read the output image to confirm it is a real image. Smoke prints token `Usage` and per-image dimensions, confirm both look right
 5. `grep -rn "console.log" src/` hits only `smoke.ts`
+6. If logging changed: after a real generate, confirm one `image {...}` JSON line on stderr and a matching appended line in `~/.image-gen-mcp/images.jsonl` (or the configured `IMAGE_GEN_MCP_LOG_FILE`); `IMAGE_GEN_MCP_LOG_FILE=none` suppresses only the file
 
 ## Known re-check items
 

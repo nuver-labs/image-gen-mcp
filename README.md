@@ -77,8 +77,18 @@ Add the same `command`, `args`, and `env` object under `mcpServers.image-gen` in
 | `IMAGE_GEN_MCP_OPENAI_MODEL` | `gpt-image-1.5` | Default OpenAI model |
 | `IMAGE_GEN_MCP_OUTPUT_DIR` | (unset) | Fallback output directory when the tool call has no `output_path` |
 | `IMAGE_GEN_MCP_TIMEOUT_MS` | `180000` | Per-request timeout to the provider API |
+| `IMAGE_GEN_MCP_LOG_FILE` | `~/.image-gen-mcp/images.jsonl` | JSONL ledger path for the per-image log. Set an absolute path to relocate it, or `none`/`off` to disable the file (stderr logging stays on) |
 
 When no `output_path` is passed, files are saved to the first of: `IMAGE_GEN_MCP_OUTPUT_DIR`, `CLAUDE_PROJECT_DIR` (set automatically by Claude Code, points at the current project), the server working directory.
+
+## Logging
+
+Every successful `generate_image` and `edit_image` call records a structured JSON entry, two ways:
+
+- **stderr** (always): one `[image-gen-mcp] image {...}` line, visible in `/mcp` output and Claude Code logs.
+- **JSONL ledger** (on by default): the same JSON appended to `~/.image-gen-mcp/images.jsonl`, one line per call. Relocate it with `IMAGE_GEN_MCP_LOG_FILE=/abs/path.jsonl` or disable the file with `IMAGE_GEN_MCP_LOG_FILE=none`. Ledger write failures never break a generation; they warn once on stderr.
+
+Each entry captures the provider, model, requested size, elapsed seconds, a truncated prompt (plus its full character count), token usage when the provider reports it, and a per-image list with the saved path, byte size, human-readable size, mime type, and actual pixel dimensions. Review recent activity with `tail -n 20 ~/.image-gen-mcp/images.jsonl` or query with `jq` (for example, total tokens today: `jq 'select(.usage) | .usage.totalTokens' ~/.image-gen-mcp/images.jsonl`). API keys are never logged.
 
 ## Tools
 

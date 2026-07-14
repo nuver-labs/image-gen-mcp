@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -12,6 +14,8 @@ export interface Config {
   outputDir?: string | undefined;
   projectDir?: string | undefined;
   requestTimeoutMs: number;
+  /** Absolute path of the JSONL image ledger, or undefined when file logging is disabled. */
+  logFile?: string | undefined;
 }
 
 // stdout is reserved for the MCP JSON-RPC channel, so all diagnostics go to stderr.
@@ -50,5 +54,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     outputDir: env.IMAGE_GEN_MCP_OUTPUT_DIR?.trim() || undefined,
     projectDir: env.CLAUDE_PROJECT_DIR?.trim() || undefined,
     requestTimeoutMs,
+    logFile: resolveLogFile(env.IMAGE_GEN_MCP_LOG_FILE),
   };
+}
+
+const DEFAULT_LOG_FILE = path.join(os.homedir(), '.image-gen-mcp', 'images.jsonl');
+
+// The JSONL ledger is on by default. IMAGE_GEN_MCP_LOG_FILE overrides the path, and
+// "none"/"off"/"0"/"false"/empty disables file logging (stderr logging always stays on).
+function resolveLogFile(raw: string | undefined): string | undefined {
+  const value = raw?.trim();
+  if (value === undefined) return DEFAULT_LOG_FILE;
+  if (value === '' || ['none', 'off', '0', 'false'].includes(value.toLowerCase())) return undefined;
+  const expanded =
+    value === '~' ? os.homedir() : value.startsWith('~/') ? path.join(os.homedir(), value.slice(2)) : value;
+  return path.resolve(expanded);
 }
