@@ -12,9 +12,8 @@ import type {
 } from './types.js';
 import { ProviderError } from './types.js';
 
-type OpenAISize = '1024x1024' | '1536x1024' | '1024x1536';
-
-const SIZE_BY_ASPECT: Record<AspectRatio, OpenAISize> = {
+// Older gpt-image models only support these three sizes, so ratios are approximated.
+const SIZE_BY_ASPECT: Record<AspectRatio, string> = {
   '1:1': '1024x1024',
   '3:2': '1536x1024',
   '4:3': '1536x1024',
@@ -25,9 +24,33 @@ const SIZE_BY_ASPECT: Record<AspectRatio, OpenAISize> = {
   '9:16': '1024x1536',
 };
 
+// gpt-image-2 accepts near-arbitrary sizes (edges multiples of 16, max edge 3840,
+// ratio up to 3:1, 655,360-8,294,400 total pixels), so ratios are honored exactly.
+const IMAGE2_SIZE_BY_ASPECT: Record<AspectRatio, string> = {
+  '1:1': '1024x1024',
+  '3:2': '1536x1024',
+  '4:3': '1536x1152',
+  '16:9': '1792x1008',
+  '21:9': '2352x1008',
+  '2:3': '1024x1536',
+  '3:4': '1152x1536',
+  '9:16': '1008x1792',
+};
+
+function isImage2(model: string): boolean {
+  return model.startsWith('gpt-image-2');
+}
+
+function sizeForAspect(model: string, aspectRatio: AspectRatio): string {
+  return isImage2(model) ? IMAGE2_SIZE_BY_ASPECT[aspectRatio] : SIZE_BY_ASPECT[aspectRatio];
+}
+
+// gpt-image-2 rejects background transparent, so those calls fall back to this model.
+const TRANSPARENT_CAPABLE_MODEL = 'gpt-image-1.5';
+
 export class OpenAIProvider implements ImageProvider {
   readonly name = 'openai' as const;
-  readonly knownModels = ['gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini'];
+  readonly knownModels = ['gpt-image-2', 'gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini'];
   private client: OpenAI | undefined;
 
   constructor(private readonly config: Config) {}
@@ -49,12 +72,26 @@ export class OpenAIProvider implements ImageProvider {
     return this.client;
   }
 
-  private baseParams(args: GenerateArgs) {
+  // gpt-image-2 does not support transparent backgrounds; such calls run on
+  // TRANSPARENT_CAPABLE_MODEL instead, with a note surfaced to the caller.
+  private resolveModel(args: GenerateArgs): { model: string; notes: string[] } {
+    if (args.background === 'transparent' && isImage2(args.model)) {
+      return {
+        model: TRANSPARENT_CAPABLE_MODEL,
+        notes: [
+          `${args.model} does not support transparent backgrounds; used ${TRANSPARENT_CAPABLE_MODEL} for this call.`,
+        ],
+      };
+    }
+    return { model: args.model, notes: [] };
+  }
+
+  private baseParams(args: GenerateArgs, model: string) {
     return {
-      model: args.model,
+      model,
       prompt: args.prompt,
       n: args.n,
-      ...(args.aspectRatio && { size: SIZE_BY_ASPECT[args.aspectRatio] }),
+      ...(args.aspectRatio && { size: sizeForAspect(model, args.aspectRatio) }),
       ...(args.quality && { quality: args.quality }),
       ...(args.background && { background: args.background }),
       // gpt-image models return png by default; only send an override.
@@ -64,18 +101,25 @@ export class OpenAIProvider implements ImageProvider {
 
   async generate(args: GenerateArgs): Promise<ProviderResult> {
     const client = this.getClient();
-    args.onProgress?.(`requesting ${args.n} image(s) from ${args.model}`);
+    const { model, notes } = this.resolveModel(args);
+    args.onProgress?.(`requesting ${args.n} image(s) from ${model}`);
     try {
-      const res = await client.images.generate(this.baseParams(args));
-      return this.parse(res, args);
+      const res = await client.images.generate(this.baseParams(args, model));
+      return this.parse(res, args, model, notes);
     } catch (err) {
-      throw mapError(err, args.model);
+      throw mapError(err, model);
     }
   }
 
   async edit(args: EditArgs): Promise<ProviderResult> {
     const client = this.getClient();
-    args.onProgress?.(`editing with ${args.model}`);
+    const { model, notes } = this.resolveModel(args);
+    if (args.inputFidelity && isImage2(model)) {
+      notes.push(
+        `${model} always processes inputs at high fidelity; input_fidelity was ignored.`,
+      );
+    }
+    args.onProgress?.(`editing with ${model}`);
     try {
       const files = await Promise.all(
         args.sources.map((s) =>
@@ -83,17 +127,22 @@ export class OpenAIProvider implements ImageProvider {
         ),
       );
       const res = await client.images.edit({
-        ...this.baseParams(args),
+        ...this.baseParams(args, model),
         image: files.length === 1 ? files[0]! : files,
-        ...(args.inputFidelity && { input_fidelity: args.inputFidelity }),
+        ...(args.inputFidelity && !isImage2(model) && { input_fidelity: args.inputFidelity }),
       });
-      return this.parse(res, args);
+      return this.parse(res, args, model, notes);
     } catch (err) {
-      throw mapError(err, args.model);
+      throw mapError(err, model);
     }
   }
 
-  private parse(res: OpenAI.Images.ImagesResponse, args: GenerateArgs): ProviderResult {
+  private parse(
+    res: OpenAI.Images.ImagesResponse,
+    args: GenerateArgs,
+    model: string,
+    notes: string[],
+  ): ProviderResult {
     const data = res.data ?? [];
     const meta = res as { output_format?: string; size?: string };
     const images = data
@@ -103,16 +152,17 @@ export class OpenAIProvider implements ImageProvider {
         mimeType: `image/${meta.output_format ?? args.outputFormat}`,
       }));
     if (images.length === 0) {
-      throw new ProviderError(`openai (${args.model}) returned no image data.`, 'api_error');
+      throw new ProviderError(`openai (${model}) returned no image data.`, 'api_error');
     }
     const sizeDescription =
-      meta.size ?? (args.aspectRatio ? SIZE_BY_ASPECT[args.aspectRatio] : 'default size');
+      meta.size ?? (args.aspectRatio ? sizeForAspect(model, args.aspectRatio) : 'default size');
     return {
       images,
       text: data[0]?.revised_prompt ?? undefined,
-      model: args.model,
+      model,
       sizeDescription,
       usage: normalizeUsage(res.usage),
+      ...(notes.length > 0 && { notes }),
     };
   }
 }

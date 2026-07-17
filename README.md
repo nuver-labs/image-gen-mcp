@@ -38,7 +38,7 @@ Notes:
 Once registered, just ask in any project:
 
 - "Generate a 16:9 blog cover about SMS gateways and save it to assets/blog/sms-gateway-cover.png"
-- "Take public/logo.png and give it a transparent background" (transparency needs `provider: openai`)
+- "Take public/logo.png and give it a transparent background" (transparency needs `provider: openai` with gpt-image-1.5 or older; the server switches models automatically when needed)
 - "Create 3 variations of a flat paper airplane icon, square, into design/drafts/"
 
 Claude calls `generate_image` or `edit_image` with an absolute `output_path` inside your project, the file lands on disk, and Claude can Read the saved path to look at the result and iterate. If a call fails, ask Claude to run `list_capabilities` to see what is configured.
@@ -74,7 +74,7 @@ Add the same `command`, `args`, and `env` object under `mcpServers.image-gen` in
 | `OPENAI_API_KEY` | (unset) | Enables the OpenAI provider |
 | `IMAGE_GEN_MCP_DEFAULT_PROVIDER` | key-based | `gemini` or `openai`. When unset: gemini if its key is set, else openai |
 | `IMAGE_GEN_MCP_GEMINI_MODEL` | `gemini-3.1-flash-image` | Default Gemini model |
-| `IMAGE_GEN_MCP_OPENAI_MODEL` | `gpt-image-1.5` | Default OpenAI model |
+| `IMAGE_GEN_MCP_OPENAI_MODEL` | `gpt-image-2` | Default OpenAI model |
 | `IMAGE_GEN_MCP_OUTPUT_DIR` | (unset) | Fallback output directory when the tool call has no `output_path` |
 | `IMAGE_GEN_MCP_TIMEOUT_MS` | `180000` | Per-request timeout to the provider API |
 | `IMAGE_GEN_MCP_LOG_FILE` | `~/.image-gen-mcp/images.jsonl` | JSONL ledger path for the per-image log. Set an absolute path to relocate it, or `none`/`off` to disable the file (stderr logging stays on) |
@@ -101,11 +101,11 @@ Generate one or more images from a text prompt and save them to disk. Returns th
 | `prompt` | string, required | Subject, style, composition, colors, any text to render |
 | `output_path` | string | Absolute file path (.png/.jpg/.webp) or directory; filename derived from the prompt when a directory |
 | `provider` | `gemini` \| `openai` | Overrides the default provider |
-| `model` | string | Overrides the model. Gemini: gemini-3.1-flash-image, gemini-3.1-flash-lite-image, gemini-3-pro-image, gemini-2.5-flash-image. OpenAI: gpt-image-1.5, gpt-image-1, gpt-image-1-mini |
-| `aspect_ratio` | `1:1` `2:3` `3:2` `3:4` `4:3` `9:16` `16:9` `21:9` | Native on Gemini; OpenAI approximates (landscape 1536x1024, portrait 1024x1536) |
+| `model` | string | Overrides the model. Gemini: gemini-3.1-flash-image (default), gemini-3.1-flash-lite-image, gemini-3-pro-image, gemini-2.5-flash-image. OpenAI: gpt-image-2 (default), gpt-image-1.5, gpt-image-1, gpt-image-1-mini |
+| `aspect_ratio` | `1:1` `2:3` `3:2` `3:4` `4:3` `9:16` `16:9` `21:9` | Native on Gemini and gpt-image-2 (exact ratios); older OpenAI models approximate (landscape 1536x1024, portrait 1024x1536) |
 | `n` | 1-4 | Gemini generates sequentially, so n>1 is slower there |
 | `quality` | `low` `medium` `high` `auto` | OpenAI only; `low` for cheap drafts |
-| `background` | `transparent` `opaque` `auto` | OpenAI only; `transparent` is ideal for logos and icons |
+| `background` | `transparent` `opaque` `auto` | OpenAI only; `transparent` is ideal for logos and icons. Needs gpt-image-1.5 or older; `transparent` calls on gpt-image-2 auto-switch to gpt-image-1.5 with a note in the result |
 | `image_size` | `1K` `2K` `4K` | Gemini 3.x only |
 | `return_image` | boolean | Also return the first image inline so the model can see it (costs context tokens) |
 
@@ -118,7 +118,7 @@ Everything from `generate_image` plus:
 | Argument | Type | Notes |
 |---|---|---|
 | `source_paths` | string[], required | 1-16 absolute paths (.png/.jpg/.jpeg/.webp). First is the edit target, extras act as references. Gemini works best with 1-3 |
-| `input_fidelity` | `low` \| `high` | OpenAI only. `high` preserves faces, logos, and fine detail |
+| `input_fidelity` | `low` \| `high` | OpenAI only. `high` preserves faces, logos, and fine detail. Ignored on gpt-image-2 (always high fidelity) |
 
 When `output_path` is omitted, the result is saved next to the first source image.
 
@@ -128,7 +128,7 @@ No arguments. Reports which providers are configured (booleans only, never key v
 
 ## Costs
 
-Every `generate_image` and `edit_image` call hits a paid API and typically costs cents per image (varies by provider, model, quality, and size). Cheap options for drafts: OpenAI `quality: low` or `gpt-image-1-mini`; Gemini `gemini-3.1-flash-lite-image`. Gemini's `gemini-2.5-flash-image` may have a free tier on unbilled keys: set `IMAGE_GEN_MCP_GEMINI_MODEL=gemini-2.5-flash-image` to default to it.
+Every `generate_image` and `edit_image` call hits a paid API and typically costs cents per image (varies by provider, model, quality, and size). Cheap options for drafts: OpenAI `quality: low` (about $0.006 for a low-quality 1024x1024 on gpt-image-2) or `gpt-image-1-mini`; Gemini `gemini-3.1-flash-lite-image`. Gemini's `gemini-2.5-flash-image` may have a free tier on unbilled keys: set `IMAGE_GEN_MCP_GEMINI_MODEL=gemini-2.5-flash-image` to default to it.
 
 ## Timeouts
 
@@ -160,6 +160,5 @@ node dist/smoke.js --provider gemini --edit ./smoke-output/smoke-gen-gemini.png
 
 - OpenAI mask/inpainting support
 - Gemini Interactions API migration (generateContent image docs are marked legacy)
-- gpt-image-2 once it appears in the official Images API model list
 - npm publish for `npx image-gen-mcp` installs
 - More providers (Stability, BFL Flux, xAI)

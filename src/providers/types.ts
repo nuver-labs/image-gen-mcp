@@ -61,6 +61,8 @@ export interface ProviderResult {
   sizeDescription: string;
   /** Token usage reported by the provider, when available. */
   usage?: TokenUsage | undefined;
+  /** Provider-side adjustments worth surfacing to the caller (e.g. model auto-switch). */
+  notes?: string[] | undefined;
 }
 
 export interface ImageProvider {

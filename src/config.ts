@@ -24,7 +24,7 @@ export function log(...args: unknown[]): void {
 }
 
 const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-image';
-const DEFAULT_OPENAI_MODEL = 'gpt-image-1.5';
+const DEFAULT_OPENAI_MODEL = 'gpt-image-2';
 const DEFAULT_TIMEOUT_MS = 180_000;
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {

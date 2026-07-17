@@ -26,7 +26,7 @@ A standalone stdio MCP server that generates and edits images with Gemini and Op
 - `src/server.ts`: McpServer plus the 3 tools (`generate_image`, `edit_image`, `list_capabilities`), progress ticker, error mapping
 - `src/config.ts`: env parsing (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `IMAGE_GEN_MCP_*` overrides including `IMAGE_GEN_MCP_LOG_FILE`), stderr `log()`
 - `src/files.ts`: output path resolution (explicit > `IMAGE_GEN_MCP_OUTPUT_DIR` > `CLAUDE_PROJECT_DIR` > cwd), slugified collision-safe names, mime sniffing, extension correction (Gemini returns JPEG by default), `readImageSize` (header parse for PNG/JPEG/WebP dimensions), `logImageEvent` (per-image record to stderr plus the JSONL ledger)
-- `src/providers/`: `ImageProvider` interface returning `ProviderResult` (now carries normalized `TokenUsage`); `openai.ts` (images.generate/edit, toFile multipart, maps `res.usage`); `gemini.ts` (generateContent, inlineData parts, single-retry wrapper, accumulates `res.usageMetadata` across the n-loop)
+- `src/providers/`: `ImageProvider` interface returning `ProviderResult` (carries normalized `TokenUsage` and optional `notes`); `openai.ts` (images.generate/edit, toFile multipart, maps `res.usage`; gpt-image-2 gets exact aspect-ratio sizes, never receives `input_fidelity`, and transparent-background calls auto-switch to gpt-image-1.5 with a result note); `gemini.ts` (generateContent, inlineData parts, single-retry wrapper, accumulates `res.usageMetadata` across the n-loop)
 
 ## Image logging
 
@@ -43,5 +43,5 @@ Every successful generate/edit logs one structured JSON record (provider, model,
 
 ## Known re-check items
 
-- Model defaults (`gemini-3.1-flash-image`, `gpt-image-1.5`) verified live 2026-07-14; revisit when providers ship new image models (gpt-image-2 was announced but absent from the official Images API model list at that date).
+- Model defaults (`gemini-3.1-flash-image`, `gpt-image-2`) verified live 2026-07-17; revisit when providers ship new image models. gpt-image-2 does not support transparent backgrounds or `input_fidelity`; the transparency auto-switch to gpt-image-1.5 is a repo convention, keep it when touching the OpenAI provider.
 - Gemini `generateContent` image docs are marked legacy; migrating to the Interactions API is planned future work, as are mask/inpainting support and npm publish.

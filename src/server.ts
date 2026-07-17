@@ -34,13 +34,13 @@ const sharedInput = {
     .string()
     .optional()
     .describe(
-      'Override the model. Gemini: gemini-3.1-flash-image (default), gemini-3.1-flash-lite-image, gemini-3-pro-image, gemini-2.5-flash-image. OpenAI: gpt-image-1.5 (default), gpt-image-1, gpt-image-1-mini.',
+      'Override the model. Gemini: gemini-3.1-flash-image (default), gemini-3.1-flash-lite-image, gemini-3-pro-image, gemini-2.5-flash-image. OpenAI: gpt-image-2 (default, best quality), gpt-image-1.5, gpt-image-1, gpt-image-1-mini. IMPORTANT: gpt-image-2 cannot do transparent backgrounds; pass gpt-image-1.5 when background transparent is needed.',
     ),
   aspect_ratio: z
     .enum(['1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9', '21:9'])
     .optional()
     .describe(
-      'Gemini supports all values natively. OpenAI approximates: landscape -> 1536x1024, portrait -> 1024x1536, 1:1 -> 1024x1024.',
+      'Gemini and OpenAI gpt-image-2 honor the ratio exactly. Older OpenAI models approximate: landscape -> 1536x1024, portrait -> 1024x1536, 1:1 -> 1024x1024.',
     ),
   n: z
     .number()
@@ -56,7 +56,9 @@ const sharedInput = {
   background: z
     .enum(['transparent', 'opaque', 'auto'])
     .optional()
-    .describe('OpenAI only, ignored by Gemini. transparent yields alpha PNG/WebP, ideal for logos and icons.'),
+    .describe(
+      'OpenAI only, ignored by Gemini. transparent yields alpha PNG/WebP, ideal for logos and icons. Requires gpt-image-1.5 or older: gpt-image-2 does not support it, so transparent calls on gpt-image-2 auto-switch to gpt-image-1.5 (noted in the result). Prefer passing model gpt-image-1.5 explicitly when you need transparency.',
+    ),
   image_size: z
     .enum(['1K', '2K', '4K'])
     .optional()
@@ -290,7 +292,7 @@ export function createServer(config: Config): McpServer {
           onProgress: (m) => ticker.tick(m),
         });
         const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-        const notes = [...targets.notes];
+        const notes = [...targets.notes, ...(result.notes ?? [])];
         const saved = writeImages(result.images, targets.paths, notes);
         logImages('generate_image', config, provider.name, result, saved, input.prompt, n, Number(elapsed));
         return successResult(
@@ -332,7 +334,9 @@ export function createServer(config: Config): McpServer {
         input_fidelity: z
           .enum(['low', 'high'])
           .optional()
-          .describe('OpenAI only. high preserves faces, logos, and fine details from the input more faithfully.'),
+          .describe(
+            'OpenAI only. high preserves faces, logos, and fine details from the input more faithfully. Ignored on gpt-image-2, which always processes inputs at high fidelity.',
+          ),
         ...sharedInput,
       },
     },
@@ -377,7 +381,7 @@ export function createServer(config: Config): McpServer {
           onProgress: (m) => ticker.tick(m),
         });
         const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-        const notes = [...targets.notes];
+        const notes = [...targets.notes, ...(result.notes ?? [])];
         const saved = writeImages(result.images, targets.paths, notes);
         logImages(
           'edit_image',
@@ -431,7 +435,7 @@ export function createServer(config: Config): McpServer {
             defaultModel: config.openaiModel,
             knownModels: providers.openai.knownModels,
             notes:
-              'quality, background transparent, input_fidelity supported' +
+              'quality supported on all models; background transparent and input_fidelity need gpt-image-1.5 or older (transparent calls on gpt-image-2 auto-switch to gpt-image-1.5)' +
               (providers.openai.isConfigured() ? '' : '; set OPENAI_API_KEY to enable'),
           },
         },
