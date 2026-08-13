@@ -3,6 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/** Must match the name field in package.json, or readVersion finds nothing. */
+const PACKAGE_NAME = '@nuver-labs/image-gen-mcp';
+
 // Walks up from this module to the package root instead of assuming a fixed
 // depth. The published tarball puts this file in dist/, but tests and any other
 // build layout put it somewhere else, and a hardcoded '../package.json' silently
@@ -16,7 +19,7 @@ function readVersion(): string {
         name?: string;
         version?: string;
       };
-      if (pkg.name === 'image-gen-mcp' && pkg.version) return pkg.version;
+      if (pkg.name === PACKAGE_NAME && pkg.version) return pkg.version;
     } catch {
       // No package.json here, or it is unreadable. Keep walking.
     }

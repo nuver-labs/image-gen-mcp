@@ -5,12 +5,12 @@ Project instructions for Claude when working in the image-gen-mcp repo.
 ## What this is
 
 A standalone stdio MCP server that generates and edits images with Gemini and
-OpenAI using the user's own API keys. It is published to npm as `image-gen-mcp`
+OpenAI using the user's own API keys. It is published to npm as `@nuver-labs/image-gen-mcp`
 and to the MCP registry as `com.nuverlabs/image-gen`, under the Nuver Labs
 GitHub org. This repo is the single owner of that server: code, docs, and
 conventions live here, not in the projects that consume it.
 
-Users install it with `npx -y image-gen-mcp`. Never reintroduce absolute local
+Users install it with `npx -y @nuver-labs/image-gen-mcp`. Never reintroduce absolute local
 paths into the README or tool messages.
 
 ## Hard rules
@@ -33,7 +33,7 @@ paths into the README or tool messages.
 
 - `src/index.ts`: bootstrap (`--version`/`--help` short circuit, stdio transport, signal handling)
 - `src/server.ts`: McpServer plus the 3 tools (`generate_image`, `edit_image`, `list_capabilities`), tool annotations, progress ticker, error mapping
-- `src/config.ts`: env parsing (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `IMAGE_GEN_MCP_*` overrides), `VERSION` resolved by walking up to the nearest `package.json` named `image-gen-mcp`, shared `expandHome`, `resolveAllowedDirs`, stderr `log()`
+- `src/config.ts`: env parsing (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `IMAGE_GEN_MCP_*` overrides), `VERSION` resolved by walking up to the nearest `package.json` whose name matches the `PACKAGE_NAME` constant (keep that constant in sync with `package.json` on any rename, or `--version` silently reports `0.0.0-unknown`), shared `expandHome`, `resolveAllowedDirs`, stderr `log()`
 - `src/files.ts`: output path resolution (explicit > `IMAGE_GEN_MCP_OUTPUT_DIR` > `CLAUDE_PROJECT_DIR` > cwd), `assertWithinAllowedDirs` containment, slugified collision-safe names, mime sniffing, extension correction (Gemini returns JPEG by default), `readImageSize` (header parse for PNG/JPEG/WebP dimensions), `logImageEvent`
 - `src/providers/`: `ImageProvider` interface returning `ProviderResult` (carries normalized `TokenUsage` and optional `notes`); `openai.ts` (images.generate/edit, toFile multipart, maps `res.usage`; gpt-image-2 gets exact aspect-ratio sizes, never receives `input_fidelity`, and transparent-background calls auto-switch to gpt-image-1.5 with a result note); `gemini.ts` (generateContent, inlineData parts, single-retry wrapper, accumulates `res.usageMetadata` across the n-loop)
 - `test/`: node:test suites compiled by `tsconfig.test.json` into `.test-build/`, which is gitignored and excluded from the published tarball

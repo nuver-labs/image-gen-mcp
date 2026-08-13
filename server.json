@@ -12,7 +12,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "image-gen-mcp",
+      "identifier": "@nuver-labs/image-gen-mcp",
       "version": "0.1.0",
       "transport": { "type": "stdio" },
       "environmentVariables": [

@@ -6,8 +6,15 @@ import { after, before, describe, it } from 'node:test';
 import { VERSION, expandHome, loadConfig, resolveAllowedDirs } from '../src/config.js';
 
 describe('VERSION', () => {
-  it('resolves from package.json, which the published tarball must still ship', () => {
-    assert.match(VERSION, /^\d+\.\d+\.\d+/);
+  // readVersion matches on the package name while walking up, so renaming the
+  // package without updating PACKAGE_NAME silently yields '0.0.0-unknown'. A
+  // semver-shaped assertion would not catch that, since the fallback is also
+  // semver shaped. Compare against the real package.json instead.
+  it('matches the version in package.json', () => {
+    const pkgPath = path.join(import.meta.dirname, '..', '..', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version: string };
+    assert.equal(VERSION, pkg.version);
+    assert.notEqual(VERSION, '0.0.0-unknown');
   });
 });
 

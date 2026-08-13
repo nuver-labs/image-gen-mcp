@@ -46,7 +46,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `npx image-gen-mcp --version`, or the tag you built from.
+      description: Output of `npx @nuver-labs/image-gen-mcp --version`, or the tag you built from.
       placeholder: 0.1.0
     validations:
       required: true

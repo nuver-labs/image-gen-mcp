@@ -22,7 +22,7 @@ if (argv.includes('--help') || argv.includes('-h')) {
       '',
       'Usage:',
       '  claude mcp add image-gen --scope user \\',
-      '    --env GEMINI_API_KEY=<key> -- npx -y image-gen-mcp',
+      '    --env GEMINI_API_KEY=<key> -- npx -y @nuver-labs/image-gen-mcp',
       '',
       'Environment:',
       '  GEMINI_API_KEY, OPENAI_API_KEY        at least one is required',

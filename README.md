@@ -1,9 +1,9 @@
 # image-gen-mcp
 
-[![npm](https://img.shields.io/npm/v/image-gen-mcp)](https://www.npmjs.com/package/image-gen-mcp)
+[![npm](https://img.shields.io/npm/v/@nuver-labs/image-gen-mcp)](https://www.npmjs.com/package/@nuver-labs/image-gen-mcp)
 [![CI](https://github.com/nuver-labs/image-gen-mcp/actions/workflows/ci.yaml/badge.svg)](https://github.com/nuver-labs/image-gen-mcp/actions/workflows/ci.yaml)
-[![license](https://img.shields.io/npm/l/image-gen-mcp)](https://github.com/nuver-labs/image-gen-mcp/blob/main/LICENSE)
-[![Node](https://img.shields.io/node/v/image-gen-mcp)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/@nuver-labs/image-gen-mcp)](https://github.com/nuver-labs/image-gen-mcp/blob/main/LICENSE)
+[![Node](https://img.shields.io/node/v/@nuver-labs/image-gen-mcp)](https://nodejs.org)
 
 Generate and edit images from your coding agent, with your own API keys. Ask for a
 blog cover, a logo tweak, or a placeholder illustration, and the file lands
@@ -24,7 +24,7 @@ this server, with `gemini-3.1-flash-image` at 16:9 2K. Prompts are in
 claude mcp add image-gen --scope user \
   --env GEMINI_API_KEY=your-gemini-key \
   --env OPENAI_API_KEY=your-openai-key \
-  -- npx -y image-gen-mcp
+  -- npx -y @nuver-labs/image-gen-mcp
 ```
 
 Start a new Claude Code session to pick it up, then check `claude mcp list`.
@@ -64,7 +64,7 @@ Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 Claude Code also accepts a per-server `"timeout": 600000`, which Claude Desktop
 does not. Cursor uses the same shape in `.cursor/mcp.json`. On Windows, GUI hosts
 cannot always find `npx`, so use `"command": "cmd"` with
-`"args": ["/c", "npx", "-y", "image-gen-mcp"]`.
+`"args": ["/c", "npx", "-y", "@nuver-labs/image-gen-mcp"]`.
 
 ## Use it
 
@@ -258,7 +258,7 @@ pnpm build
 ```
 
 Then point your client at `node /abs/path/to/image-gen-mcp/dist/index.js` instead
-of `npx -y image-gen-mcp`.
+of `npx -y @nuver-labs/image-gen-mcp`.
 
 ```bash
 pnpm test      # unit tests, no API keys needed

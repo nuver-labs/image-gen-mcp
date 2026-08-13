@@ -1,5 +1,5 @@
 {
-  "name": "image-gen-mcp",
+  "name": "@nuver-labs/image-gen-mcp",
   "version": "0.1.0",
   "description": "Stdio MCP server that generates and edits images with Gemini and OpenAI using your own API keys",
   "mcpName": "com.nuverlabs/image-gen",
@@ -33,6 +33,7 @@
   "bin": { "image-gen-mcp": "dist/index.js" },
   "files": ["dist", "README.md", "LICENSE"],
   "engines": { "node": ">=22" },
+  "publishConfig": { "access": "public" },
   "packageManager": "pnpm@9.14.2",
   "scripts": {
     "build": "tsc -p tsconfig.json && node -e \"require('fs').chmodSync('dist/index.js', 0o755)\"",
