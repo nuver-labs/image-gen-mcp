@@ -47,7 +47,7 @@ body:
     attributes:
       label: Version
       description: Output of `npx image-gen-mcp --version`, or the tag you built from.
-      placeholder: 1.0.0
+      placeholder: 0.1.0
     validations:
       required: true
 
