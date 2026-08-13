@@ -33,9 +33,15 @@ reviews:
         Never use em dashes or en dashes anywhere, including code comments,
         JSDoc, alt text, metadata, and commit messages. Use a period, comma,
         colon, parentheses, or a plain hyphen instead.
-        This project uses pnpm only. Flag npm or yarn commands in scripts and
-        docs. The release workflow is the one exception: it uses npm publish
-        for trusted publishing via OIDC.
+        Dependency management is pnpm only: flag yarn anywhere, and flag npm
+        install or npm add used to manage this project's own dependencies.
+        Do not flag npm, npx, or pnpm dlx when the command is deliberately
+        exercising the published artifact or the publishing path, because using
+        pnpm there would test something other than what users actually run:
+        npm publish and npm install -g npm@<pinned> in the release workflow,
+        npm pack for inspecting the tarball, and npm init plus npm install of
+        the packed tarball in the CI consumer check, which exists precisely to
+        prove the package works for an npm consumer.
         Keep functions small and single-purpose.
         Never run package installs or commit pnpm-lock.yaml changes when
         applying fixes. Lockfiles change only together with a package.json

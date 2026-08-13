@@ -51,7 +51,7 @@ Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
   "mcpServers": {
     "image-gen": {
       "command": "npx",
-      "args": ["-y", "image-gen-mcp"],
+      "args": ["-y", "@nuver-labs/image-gen-mcp"],
       "env": {
         "GEMINI_API_KEY": "your-gemini-key",
         "OPENAI_API_KEY": "your-openai-key"
