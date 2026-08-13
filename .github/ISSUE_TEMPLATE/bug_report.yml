@@ -1,0 +1,82 @@
+name: Bug report
+description: Something does not work the way the README says it should
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not paste API keys anywhere in this
+        issue, including inside logs or config snippets. Redact them first.
+
+        If you think you have found a security vulnerability, do not open a
+        public issue. See [SECURITY.md](../../SECURITY.md).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: >-
+        The tool call or the prompt you gave your agent, plus any relevant
+        arguments (provider, model, output_path, aspect_ratio).
+      placeholder: |
+        1. Registered with: claude mcp add image-gen --scope user ...
+        2. Asked: "generate a 16:9 cover and save it to ..."
+        3. Got: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server output
+      description: >-
+        Diagnostics go to stderr with an [image-gen-mcp] prefix. Claude Code
+        surfaces them in /mcp output and its logs. Redact any keys.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `npx image-gen-mcp --version`, or the tag you built from.
+      placeholder: 1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - gemini
+        - openai
+        - both
+        - not provider specific
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, and MCP client.
+      placeholder: macOS 15.2, Node 22.14, Claude Code 2.x
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: >-
+        Any IMAGE_GEN_MCP_* variables you set. Do not include GEMINI_API_KEY or
+        OPENAI_API_KEY values, just say whether they are set.
+      render: shell

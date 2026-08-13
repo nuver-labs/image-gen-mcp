@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest a capability, provider, or option
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This server stays small on purpose: three tools, one job. Proposals that
+        keep the surface narrow have a much better chance of landing.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >-
+        Describe the task you cannot accomplish today, not the implementation
+        you have in mind. That usually surfaces a simpler answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to see
+      description: >-
+        If this is a new tool argument, say which of the three tools it belongs
+        to and which providers support it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: >-
+        Existing arguments, a different provider or model, or another MCP
+        server.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: >-
+            This does not require a new runtime dependency, or I have explained
+            below why it does.
+        - label: >-
+            This works with the user's own API keys and adds no hosted service.

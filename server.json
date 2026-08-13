@@ -1,0 +1,76 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.nuverlabs/image-gen",
+  "title": "Image Gen",
+  "description": "Generate and edit images with Gemini and OpenAI image models using your own API keys, saved straight into your project.",
+  "repository": {
+    "url": "https://github.com/nuver-labs/image-gen-mcp",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "image-gen-mcp",
+      "version": "1.0.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "GEMINI_API_KEY",
+          "description": "Google Gemini API key. Enables the Gemini provider. At least one provider key is required.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "description": "OpenAI API key. Enables the OpenAI provider. At least one provider key is required.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "IMAGE_GEN_MCP_DEFAULT_PROVIDER",
+          "description": "Provider used when a tool call does not name one: gemini or openai. Defaults to whichever key is set, preferring gemini.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "IMAGE_GEN_MCP_GEMINI_MODEL",
+          "description": "Default Gemini model. Defaults to gemini-3.1-flash-image.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "IMAGE_GEN_MCP_OPENAI_MODEL",
+          "description": "Default OpenAI model. Defaults to gpt-image-2.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "IMAGE_GEN_MCP_OUTPUT_DIR",
+          "description": "Directory used when a tool call passes no output_path.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "IMAGE_GEN_MCP_ALLOWED_DIRS",
+          "description": "Comma separated directories that file reads and writes are confined to. Unset means unrestricted.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "IMAGE_GEN_MCP_TIMEOUT_MS",
+          "description": "Per-request timeout to the provider API in milliseconds. Defaults to 180000.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "IMAGE_GEN_MCP_LOG_FILE",
+          "description": "Path of the JSONL image ledger. Defaults to ~/.image-gen-mcp/images.jsonl. Set to none to disable the file.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

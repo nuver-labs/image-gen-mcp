@@ -1,8 +1,14 @@
 node_modules/
 dist/
+.test-build/
 smoke-output/
 .env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
 .DS_Store
 .omc/
 .claude/
 .cursor/
+.idea/

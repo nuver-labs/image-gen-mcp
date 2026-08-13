@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: en-US
+
+tone_instructions: >-
+  Be direct and concise. Never use em dashes or en dashes in any comment,
+  summary, or suggested code. Use periods, commas, colons, or parentheses.
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  poem: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - WIP
+      - DO NOT MERGE
+
+  path_filters:
+    - '!**/node_modules/**'
+    - '!**/pnpm-lock.yaml'
+    - '!**/.DS_Store'
+    - '!dist/**'
+    - '!.test-build/**'
+
+  path_instructions:
+    - path: '**'
+      instructions: |
+        Never use em dashes or en dashes anywhere, including code comments,
+        JSDoc, alt text, metadata, and commit messages. Use a period, comma,
+        colon, parentheses, or a plain hyphen instead.
+        This project uses pnpm only. Flag npm or yarn commands in scripts and
+        docs. The release workflow is the one exception: it uses npm publish
+        for trusted publishing via OIDC.
+        Keep functions small and single-purpose.
+        Never run package installs or commit pnpm-lock.yaml changes when
+        applying fixes. Lockfiles change only together with a package.json
+        change, made by a human with the pinned pnpm version.
+
+    - path: 'src/**/*.ts'
+      instructions: |
+        stdout is reserved for the MCP JSON-RPC channel. Flag any console.log
+        outside src/smoke.ts, which is a standalone CLI that never speaks MCP.
+        All diagnostics go through log() in src/config.ts, which writes to
+        stderr.
+        Flag anything that could log, echo, or return an API key value,
+        including error messages, thrown objects, and the list_capabilities
+        payload, which reports configured providers as booleans only.
+        Expected failures must not throw across the MCP boundary. They return
+        { isError: true, content: [text] } with an actionable message, built
+        from ProviderError or FileError.
+        This is a published package, so the three tool names and their input
+        schemas are a contract. Flag renames or removed fields, which need a
+        major release.
+        Flag any new runtime dependency.
+        Path handling is security relevant. output_path and source_paths are
+        model supplied. Containment checks must use path.relative against a
+        realpath resolved root and must never use startsWith, which passes a
+        sibling directory sharing a name prefix. Nonexistent paths must be
+        resolved through their nearest existing ancestor before the check.
+        ESM with NodeNext resolution: relative imports need the .js extension.
+
+    - path: 'test/**/*.ts'
+      instructions: |
+        Tests use the Node built-in runner. Flag any added test framework
+        dependency.
+        Path containment changes need negative cases: a .. traversal, a
+        sibling directory sharing a name prefix with an allowed root, and a
+        symlink pointing outside a root.
+
+    - path: '.github/workflows/**'
+      instructions: |
+        Flag unpinned action versions, secrets echoed into logs or files, and
+        steps that would run untrusted code from fork pull requests.
+        The release workflow publishes to npm through OIDC trusted publishing.
+        Flag any reintroduction of NODE_AUTH_TOKEN or an npm token secret.
+
+  tools:
+    # Waits for ALL GitHub Checks, then comments on failures.
+    github-checks:
+      enabled: true
+
+chat:
+  auto_reply: true
+  # Public repo, so outside contributors can spend the chat quota.
+  # Set to false if that becomes a problem.
+  allow_non_org_members: true
+
+knowledge_base:
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto

@@ -1,8 +1,7 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { Config } from './config.js';
-import { log } from './config.js';
+import { expandHome, log } from './config.js';
 import type { TokenUsage } from './providers/types.js';
 
 export type OutputFormat = 'png' | 'jpeg' | 'webp';
@@ -147,10 +146,57 @@ export function readImageSize(buffer: Buffer): { width: number; height: number }
   return undefined;
 }
 
-function expandHome(p: string): string {
-  if (p === '~') return os.homedir();
-  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
-  return p;
+// Resolves a path through realpath so the containment check compares real paths.
+// The target often does not exist yet (an output file, or a directory about to be
+// created), so walk up to the nearest existing ancestor, resolve that, and rejoin
+// the remaining segments. Checking only the literal path would let a symlinked
+// parent directory escape the root, and skipping the check when the path does not
+// exist is the hole that made CVE-2025-53109 exploitable.
+function realpathThroughAncestor(target: string): string {
+  let current = path.resolve(target);
+  const trailing: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(current), ...trailing.reverse());
+    } catch {
+      const parent = path.dirname(current);
+      // Reached the filesystem root without finding anything that exists.
+      if (parent === current) return path.resolve(target);
+      trailing.push(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+/**
+ * Confines a path to the configured allowed roots. No-op when containment is off
+ * (allowedDirs undefined). An empty array means the configuration named no usable
+ * directory, and everything is refused rather than silently allowed.
+ *
+ * Containment is tested with path.relative, not startsWith: a prefix match would
+ * accept "/data/photos-private" for the root "/data/photos", which is exactly the
+ * separator bug behind CVE-2025-53110.
+ */
+export function assertWithinAllowedDirs(
+  candidate: string,
+  allowedDirs: string[] | undefined,
+  kind: 'output' | 'source',
+): void {
+  if (allowedDirs === undefined) return;
+
+  const resolved = realpathThroughAncestor(candidate);
+  const contained = allowedDirs.some((root) => {
+    const rel = path.relative(root, resolved);
+    return rel === '' || (!rel.startsWith(`..${path.sep}`) && rel !== '..' && !path.isAbsolute(rel));
+  });
+  if (contained) return;
+
+  const roots = allowedDirs.length > 0 ? allowedDirs.join(', ') : '(none usable)';
+  const what = kind === 'output' ? 'Output path' : 'Source image';
+  throw new FileError(
+    `${what} ${candidate} is outside the directories this server is allowed to use. ` +
+      `Allowed: ${roots}. Choose a path inside one of them, or change IMAGE_GEN_MCP_ALLOWED_DIRS in the server environment.`,
+  );
 }
 
 function fallbackDir(config: Config, preferredDir?: string): { dir: string; source: string } {
@@ -225,6 +271,9 @@ export function resolveOutputTargets(args: ResolveOutputArgs): ResolvedOutputs {
     stem = slugify(args.prompt);
     notes.push(`No output_path given; saving to ${fb.source} (${dir})`);
   }
+
+  // Checked before mkdirSync so a refused call never leaves directories behind.
+  assertWithinAllowedDirs(dir, args.config.allowedDirs, 'output');
 
   try {
     fs.mkdirSync(dir, { recursive: true });

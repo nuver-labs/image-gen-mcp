@@ -6,6 +6,7 @@ import type { Config } from './config.js';
 import { VERSION, log } from './config.js';
 import {
   FileError,
+  assertWithinAllowedDirs,
   correctExtensionForMime,
   detectMime,
   formatBytes,
@@ -24,7 +25,7 @@ const sharedInput = {
     .string()
     .optional()
     .describe(
-      'Absolute path strongly recommended. Either a full file path (.png/.jpg/.webp) or a directory (a slugified filename is derived from the prompt). If omitted: $IMAGE_GEN_MCP_OUTPUT_DIR, then $CLAUDE_PROJECT_DIR, then the server cwd.',
+      'Absolute path strongly recommended. Either a full file path (.png/.jpg/.webp) or a directory (a slugified filename is derived from the prompt). If omitted: $IMAGE_GEN_MCP_OUTPUT_DIR, then $CLAUDE_PROJECT_DIR, then the server cwd. The server may be restricted to specific directories; call list_capabilities to see allowedDirs.',
     ),
   provider: z
     .enum(['gemini', 'openai'])
@@ -257,6 +258,14 @@ export function createServer(config: Config): McpServer {
       title: 'Generate image',
       description:
         'Generate one or more images from a text prompt using Gemini or OpenAI image models and save them to disk. Returns the absolute saved file path(s) plus provider/model metadata. Strongly prefer passing an absolute output_path inside the current project so the file lands where you can use it. Each image costs real API credits.',
+      // Creates new files and never overwrites: resolveOutputTargets suffixes any
+      // name that is already taken, so this is additive rather than destructive.
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       inputSchema: {
         prompt: z
           .string()
@@ -318,6 +327,14 @@ export function createServer(config: Config): McpServer {
       title: 'Edit image',
       description:
         'Edit or combine existing image file(s) using a text instruction: modify elements, restyle, add or remove content, or merge references. Reads the source image(s) from disk, saves the result as a NEW file (never overwrites sources), and returns the absolute saved path(s).',
+      // Source files are passed as forbidden targets, so the result is always a new
+      // file and no input is ever modified or replaced.
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       inputSchema: {
         prompt: z
           .string()
@@ -348,6 +365,9 @@ export function createServer(config: Config): McpServer {
         const n = input.n ?? 1;
         const sources: SourceImage[] = input.source_paths.map((p) => {
           const abs = path.resolve(p);
+          // Checked before the read: these bytes get uploaded to the provider, so
+          // an uncontained source path is an exfiltration channel, not just a read.
+          assertWithinAllowedDirs(abs, config.allowedDirs, 'source');
           if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
             throw new FileError(
               `Input image not found: ${p}. source_paths must be absolute paths to existing .png/.jpg/.jpeg/.webp files.`,
@@ -416,7 +436,13 @@ export function createServer(config: Config): McpServer {
     {
       title: 'List image provider capabilities',
       description:
-        'Report which image providers (gemini, openai) are configured in this server, the default provider and models, known model options, and the output directory fallback. Call this first if unsure what is available or why a call failed.',
+        'Report which image providers (gemini, openai) are configured in this server, the default provider and models, known model options, the output directory fallback, and any directory restriction in force. Call this first if unsure what is available or why a call failed.',
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async () => {
       const caps = {
@@ -444,6 +470,9 @@ export function createServer(config: Config): McpServer {
           CLAUDE_PROJECT_DIR: config.projectDir ?? '(unset)',
           cwd: process.cwd(),
         },
+        // Directory names are not secret, and the model needs the boundary to
+        // pick a workable output_path instead of guessing and failing.
+        allowedDirs: config.allowedDirs ?? '(unrestricted)',
         requestTimeoutMs: config.requestTimeoutMs,
         version: VERSION,
       };
