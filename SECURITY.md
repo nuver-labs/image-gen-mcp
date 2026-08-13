@@ -17,7 +17,7 @@ you ask not to be.
 
 ## Supported versions
 
-Fixes land on the latest published version. There are no long term support
+Fixes land on the latest published version. There are no long-term support
 branches. Upgrade with `npx -y @nuver-labs/image-gen-mcp@latest`, or bump the pinned version
 in your MCP client configuration.
 

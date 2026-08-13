@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Tags are the record of what has shipped, so fetch all of them.
           fetch-depth: 0
@@ -69,27 +69,30 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           run_install: false
 
       # Trusted publishing needs Node 22.14+ and npm 11.5.1+. Node 22 ships an
       # older npm, so the CLI is upgraded separately below.
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
 
+      # Pinned, not @latest: this step feeds the job that holds id-token: write,
+      # so a mutable version here is a supply chain hole. 11.5.1 is the documented
+      # minimum for trusted publishing.
       - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+        run: npm install -g npm@12.0.2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -108,14 +111,26 @@ jobs:
           npx @modelcontextprotocol/inspector@0.22.0 --cli node dist/index.js --method tools/list > tools.json
           test "$(jq '.tools | length' tools.json)" = "3"
 
-      # npm publish runs before tagging on purpose. If it fails there is no tag,
-      # so the next push retries cleanly. Tagging first would make the guard
-      # above skip the retry and wedge the release.
+      # npm publish runs before tagging on purpose. If a later step fails there is
+      # no tag, so the next push retries cleanly. Tagging first would make the
+      # guard above skip the retry and wedge the release.
+      #
+      # That retry only works if this step is idempotent. Without the existence
+      # check below, a run that published to npm but then failed on the registry
+      # or the release would retry into "version already exists" and stay stuck.
       #
       # No NODE_AUTH_TOKEN: the OIDC exchange authenticates this publish and
       # attaches a provenance attestation automatically.
       - name: Publish to npm
-        run: npm publish
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          if npm view "$name@$VERSION" version --json > /dev/null 2>&1; then
+            echo "$name@$VERSION is already on npm, skipping publish (this is a retry)."
+          else
+            npm publish
+          fi
 
       # Publishing to the official MCP registry is what feeds the downstream
       # directories: PulseMCP and Glama ingest from it rather than from npm.
@@ -125,6 +140,7 @@ jobs:
         env:
           MCP_PUBLISHER_DNS_KEY: ${{ secrets.MCP_PUBLISHER_DNS_KEY }}
           VERSION: ${{ needs.check.outputs.version }}
+          PUBLISHER_VERSION: v1.8.1
         run: |
           if [ -z "$MCP_PUBLISHER_DNS_KEY" ]; then
             echo "::warning::MCP_PUBLISHER_DNS_KEY is not set, skipping the MCP registry publish."
@@ -134,8 +150,18 @@ jobs:
           # server.json here means a release bump only ever touches one file.
           jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' server.json > server.tmp.json
           mv server.tmp.json server.json
-          curl -sSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_amd64.tar.gz" \
-            | tar -xz mcp-publisher
+          # Pinned and checksum verified. This binary runs in a job holding
+          # id-token: write and the DNS signing key, so piping an unverified
+          # "latest" download straight into a shell would be the weakest link in
+          # the whole release path.
+          base="https://github.com/modelcontextprotocol/registry/releases/download/${PUBLISHER_VERSION}"
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          curl -sSLf -o "$archive" "${base}/${archive}"
+          curl -sSLf -o checksums.txt "${base}/registry_${PUBLISHER_VERSION#v}_checksums.txt"
+          grep " ${archive}\$" checksums.txt > expected.txt
+          sha256sum -c expected.txt
+          tar -xzf "$archive" mcp-publisher
+
           ./mcp-publisher login dns --domain nuverlabs.com --private-key "$MCP_PUBLISHER_DNS_KEY"
           ./mcp-publisher publish
 
