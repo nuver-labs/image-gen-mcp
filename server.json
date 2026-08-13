@@ -2,18 +2,18 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.nuverlabs/image-gen",
   "title": "Image Gen",
-  "description": "Generate and edit images with Gemini and OpenAI image models using your own API keys, saved straight into your project.",
+  "description": "Generate and edit images from your coding agent with Gemini and OpenAI, using your own API keys.",
   "repository": {
     "url": "https://github.com/nuver-labs/image-gen-mcp",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "0.2.1",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@nuver-labs/image-gen-mcp",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         {
