@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Superseded runs on the same branch or pull request are cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # pnpm has to be on PATH before setup-node, or its pnpm cache resolution
+      # has no package manager to query.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm run build
+
+      # stdout is the MCP JSON-RPC channel. A stray console.log corrupts every
+      # response, and it is invisible until a client fails to parse the stream.
+      - name: Check that stdout is not used for logging
+        run: |
+          if grep -rn "console\.log" src/ --include='*.ts' | grep -v 'src/smoke\.ts'; then
+            echo "::error::console.log found outside src/smoke.ts. Use log() from src/config.ts, which writes to stderr."
+            exit 1
+          fi
+
+      # Everything below runs without API keys, which is the point: the whole MCP
+      # surface is verifiable in CI even though the provider calls are not.
+      - name: Verify the MCP tool surface
+        run: |
+          npx @modelcontextprotocol/inspector@0.22.0 --cli node dist/index.js --method tools/list > tools.json
+          count="$(jq '.tools | length' tools.json)"
+          if [ "$count" != "3" ]; then
+            echo "::error::expected 3 tools, found $count"
+            jq '[.tools[].name]' tools.json
+            exit 1
+          fi
+          # Directories and clients read annotations, so a missing one is a regression.
+          missing="$(jq -r '[.tools[] | select(.annotations == null) | .name] | join(", ")' tools.json)"
+          if [ -n "$missing" ]; then
+            echo "::error::tools missing annotations: $missing"
+            exit 1
+          fi
+
+      - name: Verify a keyless start writes nothing to stdout
+        run: |
+          out="$(node dist/index.js < /dev/null 2>/dev/null || true)"
+          if [ -n "$out" ]; then
+            echo "::error::keyless startup wrote to stdout, which belongs to the JSON-RPC channel:"
+            printf '%s\n' "$out"
+            exit 1
+          fi
+
+      - name: Verify the published tarball contents
+        run: |
+          pnpm pack --pack-destination /tmp > /dev/null
+          tarball="$(ls /tmp/*image-gen-mcp-*.tgz)"
+          tar -tzf "$tarball" | sort > contents.txt
+          cat contents.txt
+          for required in package/package.json package/README.md package/LICENSE package/dist/index.js; do
+            grep -qx "$required" contents.txt || { echo "::error::missing from tarball: $required"; exit 1; }
+          done
+          if grep -qE '^package/(test|\.test-build|src)/' contents.txt; then
+            echo "::error::tarball contains sources or tests; check the files field in package.json"
+            exit 1
+          fi
+
+      # VERSION is read from package.json at runtime by walking up from the module.
+      # Installing the tarball is the only way to prove that walk still works from
+      # the layout npm actually ships.
+      - name: Verify the tarball runs and reports its version
+        run: |
+          tarball="$(ls /tmp/*image-gen-mcp-*.tgz)"
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$tarball" > /dev/null
+          expected="$(node -p "require('$GITHUB_WORKSPACE/package.json').version")"
+          actual="$(npx --no-install image-gen-mcp --version)"
+          echo "expected $expected, got $actual"
+          [ "$expected" = "$actual" ]

@@ -1,19 +1,49 @@
 {
-  "name": "image-gen-mcp",
+  "name": "@nuver-labs/image-gen-mcp",
   "version": "0.1.0",
-  "description": "Stdio MCP server that generates and edits images with Gemini and OpenAI",
+  "description": "Stdio MCP server that generates and edits images with Gemini and OpenAI using your own API keys",
+  "mcpName": "com.nuverlabs/image-gen",
   "type": "module",
-  "private": true,
+  "license": "MIT",
+  "author": "Nuver Labs (https://nuverlabs.com)",
+  "homepage": "https://github.com/nuver-labs/image-gen-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nuver-labs/image-gen-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nuver-labs/image-gen-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "modelcontextprotocol",
+    "claude",
+    "claude-code",
+    "ai-agent",
+    "llm",
+    "image-generation",
+    "image-editing",
+    "gemini",
+    "nano-banana",
+    "openai",
+    "gpt-image"
+  ],
   "bin": { "image-gen-mcp": "dist/index.js" },
-  "files": ["dist", "README.md"],
+  "files": ["dist", "README.md", "LICENSE"],
   "engines": { "node": ">=22" },
+  "publishConfig": { "access": "public" },
   "packageManager": "pnpm@9.14.2",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').chmodSync('dist/index.js', 0o755)\"",
     "watch": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test \".test-build/test/*.test.js\"",
     "start": "node dist/index.js",
     "smoke": "pnpm build && node dist/smoke.js",
-    "inspect": "pnpm build && npx @modelcontextprotocol/inspector@0.22.0 --cli node dist/index.js --method tools/list"
+    "inspect": "pnpm build && npx @modelcontextprotocol/inspector@0.22.0 --cli node dist/index.js --method tools/list",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@google/genai": "^2.11.0",

@@ -41,7 +41,7 @@ export function resolveProvider(
     throw new ProviderError(
       `Provider '${name}' is not configured: ${ENV_BY_PROVIDER[name]} is not set in this MCP server's environment. ` +
         `Configured providers: ${configured.length > 0 ? configured.join(', ') : 'none'}. ` +
-        `Re-register with: claude mcp add image-gen -s user -e ${ENV_BY_PROVIDER[name]}=<key> -- node <abs-path>/dist/index.js`,
+        `Re-register with: claude mcp add image-gen --scope user --env ${ENV_BY_PROVIDER[name]}=<key> -- npx -y @nuver-labs/image-gen-mcp`,
       'not_configured',
     );
   }
